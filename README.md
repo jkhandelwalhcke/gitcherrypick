@@ -1,25 +1,44 @@
 # GitCherryPick
 
-GitCherryPick is a platform where open-source contributors prove their skills with evidence, allowing recruiters to cherry-pick from a ranked pool.
+GitCherryPick is a platform where open-source contributors prove skill with **evidence** rather than self-assertion, and hirers cherry-pick candidates from a ranked pool.
 
-## How it Works
+- **Claims:** A contributor signs in with GitHub and submits a **claim** (an evidence bundle): up to 5 of their best merged pull requests, 0 to 20 optional supporting projects, and the skills those pull requests demonstrate. One model call judges every pull request against every declared skill; supporting projects are scored arithmetically only.
+- **Primary and secondary skills:** Skill standing is derived per `(user, skill)` from distinct surviving pull requests, never self-declared. **5 or more** distinct evidencing pull requests make a skill _primary_ (ranked and searchable). **1 to 4** make it _secondary_ (visible and score-contributing, never ranked). Score and standing are orthogonal—a secondary skill may outscore a primary one and remains secondary—and promotion to primary happens automatically upon the fifth distinct pull request.
+- **Scores and hirers:** Three score families come out of evaluation: **per PR per skill**, **per skill**, and two user-level scores—**Overall** (depth, 0–100) and **Generalist** (breadth, unbounded). Scores change only on a rubric change or evidence change, never with age. Hirers use separately verified accounts; scorecards are gated, and contributors see only their own rank.
 
-- **Claims:** A contributor signs in with GitHub and submits an evidence bundle called a claim. This includes up to five of their best merged PRs, optional supporting projects, and the skills those PRs demonstrate. One AI model call judges every PR against every declared skill.
-- **Primary and Secondary Skills:** Skill standing is derived from evidence, not self-declared. Having five distinct evidencing PRs makes a skill _primary_, meaning it is ranked and searchable. Having one to four PRs makes a skill _secondary_, which contributes to the score and is visible, but is never ranked. Promotion to primary happens automatically at the fifth distinct PR.
-- **Hirers:** Hirers are separately verified accounts. Scorecards are gated, and contributors can only see their own rank.
+## Status
 
-## Project Status
+### What runs today
 
-The project is currently at **Stage 4 — Core backend**. Stages 1 through 3 (Planning, Evaluation design, and Integration tests) are approved. There are 31 integration test fixtures written that are currently failing (RED), and the current implementation work aims to turn them green.
+- **Local development stack (`make dev` / `backend/scripts/dev.sh`):** Starts PostgreSQL in a container (`55434`), `fakethirdparty` (`18082`, standing in for GitHub, Google, and Resend), and `api` (`8080`), seeded with test fixtures (`--reset` rebuilds the database from schema; `--rich` adds the scored population). Sign-in runs the full OAuth path (state cookie, code exchange, session mint) against the stand-in without requiring credentials from `github.com`.
+- **Backend binaries (`backend/cmd/`):** Contains `api`, `evaluator`, `fakethirdparty`, `devdata`, and `jobs`.
+- **Frontend (`frontend/`):** The React and TypeScript client is present in the tree and can run every screen against the local API and seeded data except for a live score appearing automatically on a newly submitted claim.
 
-**What runs today:**
+### What does not run yet
 
-- A local development environment can be spun up using `backend/scripts/dev.sh`.
-- This environment successfully starts a PostgreSQL database, the core API, and a `fakethirdparty` service that stands in for GitHub, Google, and Resend.
-- The complete OAuth sign-in flow works locally against the stand-in service, meaning no real GitHub credentials are required to test authentication.
-- A client application can be built against this API for every screen, except for live scores appearing automatically.
+- **Evaluator in `make dev` and live model call (Stage 5):** `backend/scripts/dev.sh` does not start `cmd/evaluator`. A submitted claim stays queued until `cmd/evaluator` is run separately, and while `internal/adapter/anthropic` implements the batch submit/poll/fetch flow against `fakethirdparty`'s wire contract, both `CLAUDE.md` and `backend/scripts/dev.sh` note that Stage 5's live model call is still a stub.
+- **Deployment and containerization (Stage 7):** `backend/scripts/dev.sh` runs PostgreSQL in Docker and runs the binaries on the host; Stage 7 images and orchestration are not yet implemented.
 
-**What does not run:**
+## Layout
 
-- The evaluator backend is not currently running.
-- Any submitted claim simply sits in a queue because the model call for evaluating claims is currently just a stub.
+### Top-level directories
+
+- `.claude/` — Agent architecture rules (`Agent.md`) and bootstrap scripts.
+- `.github/workflows/` — CI workflows (`check.yml` and CLA check).
+- `adr/` — Approved Architecture Decision Records (`ADR-0001` through `ADR-0022`).
+- `backend/` — Go backend module (`cmd/`, `internal/`, `e2e/`, `scripts/`).
+- `evaluation/` — Scoring rubric specifications.
+- `flow-deisgn/` — Flow design documents.
+- `frontend/` — React and TypeScript client application.
+- `rfc/` — Feature RFCs (`.md`) and linked schema deltas (`.schema`).
+- `scripts/` — Repository utility scripts.
+
+### Packages under `backend/internal/`
+
+- `backend/internal/adapter/` — Infrastructure and third-party adapters implementing `port` interfaces (`anthropic`, `clock`, `crypto`, `github`, `google`, `httpx`, `money`, `places`, `resend`).
+- `backend/internal/controller/` — HTTP controllers, router, middleware, and IO validation/serialization.
+- `backend/internal/domain/` — Domain entities and errors; imports nothing from `internal/`.
+- `backend/internal/port/` — Boundary interfaces (`Repository`, `Broker`, `AIClient`, `GitHub`, `Notifier`, `Clock`, and service interfaces).
+- `backend/internal/repository/` — Storage implementations (`postgres`, embedded SQL migrations, and queue broker) translating between domain models and database rows.
+- `backend/internal/scoring/` — Pure arithmetic scoring functions with no I/O.
+- `backend/internal/service/` — Core business logic depending only on `port` interfaces.
